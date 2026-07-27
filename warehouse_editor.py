@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.4
+库位表格可视化编辑器 v6.5
 作者：小刘
 版本历史：
+- v6.5 (2026-07-27): 右键仅取消锁定，不触发选中
 - v6.4 (2026-07-27): 右键点击取消锁定、调试日志
 - v6.3 (2026-07-27): Ctrl+点击锁定详情面板、层高/承重自动保存到服务器
 - v6.2 (2026-07-27): 悬停格子显示详情、清理死代码、优化批量操作提示
@@ -782,7 +783,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.4</div>
+<div class="version">v6.5</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1047,6 +1048,7 @@ function renderGrid() {
       cell.title = `X${x} Y${y} Z${currentZ} (${statusText})`;
       // 所有格子都支持鼠标拖选（包括上层）
       cell.onmousedown = (e) => {
+        if (e.button === 2) return; // 右键不触发选中
         e.preventDefault();
         onCellMouseDown(x, y, e);
       };
@@ -1861,7 +1863,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.4")
+    print(f"🦀 库位编辑器 v6.5")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
