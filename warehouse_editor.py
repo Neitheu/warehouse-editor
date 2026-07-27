@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.2
-现代 UI 设计 · SVG 矢量图标 · 响应式布局
-
+库位表格可视化编辑器 v6.4
+作者：小刘
 版本历史：
+- v6.4 (2026-07-27): 右键点击取消锁定、调试日志
+- v6.3 (2026-07-27): Ctrl+点击锁定详情面板、层高/承重自动保存到服务器
 - v6.2 (2026-07-27): 悬停格子显示详情、清理死代码、优化批量操作提示
 - v6.1 (2026-07-25): Excel 解析库从 python-calamine 改回 openpyxl，修复 CalamineWorkbook 导入错误
 - v6.0 (2026-07-24): XY轴单独翻转功能上线，支持 X↔ 和 Y↕ 独立操作
@@ -723,7 +724,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
       <div class="drop-zone-hint">支持 .xlsx 格式</div>
     </div>
     
-    <div class="grid-toolbar" id="gridToolbar" style="display:none">
+    <div class="grid-toolbar" id="gridToolbar" style="display:none" onclick="if(ctrlLocked){detailLocked=false;ctrlLocked=false}">
       <div class="z-tabs" id="zTabs"></div>
       <div class="toolbar-spacer"></div>
       <button id="btnSyncLayers" class="btn btn-sm" onclick="toggleSyncLayers()" title="同步所有层：修改Z1时所有层一起变">
@@ -781,7 +782,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.2</div>
+<div class="version">v6.4</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -813,6 +814,8 @@ let batchDialogVisible = false;
 let manualShieldedByLayer = {};
 let syncLayersEnabled = false;
 let selectedCellXY = null; // 当前选中的格子 {x, y}
+let detailLocked = false; // 详情面板锁定（点击格子后锁定，悬停不切换）
+let ctrlLocked = false; // Ctrl+点击锁定（点击toolbar可解锁）
 let cellConfigs = {}; // 每个格子独立的层高/承重: { "x,y,z": { height, weight } }
 
 function getShieldedLayer(z) {
@@ -860,6 +863,11 @@ async function handleFile(file) {
     manualShieldedByLayer[z].add(key);
   });
   layerConfigs = data.layer_configs || {};
+  // 恢复之前保存的 cellConfigs
+  if (data.saved_cell_configs && Object.keys(data.saved_cell_configs).length > 0) {
+    cellConfigs = data.saved_cell_configs;
+    showToast(`已恢复 ${Object.keys(cellConfigs).length} 个已保存的配置`);
+  }
   zoom = 1;
   gridOffset = { x: 0, y: 0 };
   
@@ -892,6 +900,7 @@ function renderZTabs() {
     tab.textContent = 'Z=' + z;
     tab.onclick = () => {
       currentZ = z;
+      detailLocked = false; // 切换层时解锁详情面板
       renderZTabs();
       renderGrid();
       updateStats();
@@ -955,6 +964,28 @@ function updateCellConfig(x, y, z, field, val) {
     cellConfigs[key][field] = parsedVal;
     showToast(`已保存 X${x} Y${y} Z${z} ${field === 'height' ? '层高' : '承重'}`);
   }
+  // 自动保存到服务器
+  autoSaveConfig();
+}
+
+let saveTimer = null;
+function autoSaveConfig() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const resp = await fetch('/save-config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Session-Id': sessionId},
+        body: JSON.stringify({ cell_configs: cellConfigs })
+      });
+      const result = await resp.json();
+      if (result.ok) {
+        console.log('配置已自动保存');
+      }
+    } catch (e) {
+      console.error('自动保存失败:', e);
+    }
+  }, 500); // 500ms 防抖
 }
 
 function renderGrid() {
@@ -1021,7 +1052,8 @@ function renderGrid() {
       };
       cell.onmouseover = () => {
         if (isSelecting) onCellMouseOver(x, y);
-        else showCellDetail(x, y);
+        else if (!detailLocked) showCellDetail(x, y);
+        else console.log('detailLocked, skip hover');
       };
       cell.onmouseup = () => {
         if (isSelecting) onCellMouseUp();
@@ -1063,6 +1095,9 @@ function onCellMouseUp() {
     }
     // toggle之后再显示详情，确保状态和格子颜色一致
     showCellDetail(x, y);
+    detailLocked = true; // 锁定详情面板，悬停不再切换
+    ctrlLocked = ctrlHeld; // Ctrl+点击时标记
+    console.log('Cell clicked:', {x, y, ctrlHeld, detailLocked, ctrlLocked});
   } else if (selectedCells.size > 1) {
     // 多个：弹批量确认框
     showBatchDialog();
@@ -1403,6 +1438,15 @@ viewport.addEventListener('mousedown', (e) => {
   dragStart = { x: e.clientX - gridOffset.x, y: e.clientY - gridOffset.y };
   viewport.classList.add('dragging');
 });
+// 右键点击取消锁定
+viewport.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (detailLocked) {
+    detailLocked = false;
+    ctrlLocked = false;
+    console.log('右键取消锁定');
+  }
+});
 
 document.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
@@ -1512,6 +1556,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.handle_upload()
         elif self.path == '/export':
             self.handle_export()
+        elif self.path == '/save-config':
+            self.handle_save_config()
         else:
             self.send_error(404)
     
@@ -1546,15 +1592,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
             wb_orig.save(buf)
             session_id = self._get_session_id()
             with Handler._lock:
+                # 如果会话已存在，保留已有的 cell_configs
+                existing_configs = {}
+                if session_id in Handler._sessions:
+                    existing_configs = Handler._sessions[session_id].get('cell_configs', {})
                 Handler._sessions[session_id] = {
                     'bytes': buf.getvalue(),
-                    'ts': time.time()
+                    'ts': time.time(),
+                    'cell_configs': existing_configs  # 保留之前保存的配置
                 }
                 self._cleanup_sessions()
             
             # 解析用 data_only 版本（需要读取公式的计算结果）
             result = parse_excel(file_data)
+            # 附加已保存的 cell_configs
+            result['saved_cell_configs'] = Handler._sessions[session_id].get('cell_configs', {})
             self.json_response(result)
+        except Exception as e:
+            self.json_response({'error': str(e)})
+    
+    def handle_save_config(self):
+        """保存单个格子的层高/承重配置"""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length)
+        try:
+            data = json.loads(body)
+            session_id = self._get_session_id()
+            
+            with Handler._lock:
+                if session_id in Handler._sessions:
+                    # 保存配置到会话
+                    if 'cell_configs' not in Handler._sessions[session_id]:
+                        Handler._sessions[session_id]['cell_configs'] = {}
+                    
+                    # 合并新的配置
+                    new_configs = data.get('cell_configs', {})
+                    Handler._sessions[session_id]['cell_configs'].update(new_configs)
+                    
+                    self.json_response({'ok': True, 'saved': len(new_configs)})
+                else:
+                    self.json_response({'error': 'Session not found'})
         except Exception as e:
             self.json_response({'error': str(e)})
     
@@ -1784,7 +1861,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.2")
+    print(f"🦀 库位编辑器 v6.4")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
