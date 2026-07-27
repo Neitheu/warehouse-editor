@@ -1250,7 +1250,10 @@ function batchToggleStatus(status) {
     if (changedCount > 0) msg += `已${status === 'enabled' ? '启用' : '禁用'} ${changedCount} 个库位`;
     if (hVal !== undefined || wVal !== undefined) {
       const count = selectedCells.size * zsToModify.length;
-      msg += (msg ? '，' : '') + `已设置 ${count} 个库位的层高/承重`;
+      const parts = [];
+      if (hVal !== undefined) parts.push(`层高 ${hVal}m`);
+      if (wVal !== undefined) parts.push(`承重 ${wVal}kg`);
+      msg += (msg ? '，' : '') + `已设置 ${count} 个库位：${parts.join('，')}`;
     }
     showToast(msg);
   }
