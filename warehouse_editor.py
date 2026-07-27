@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.1
+库位表格可视化编辑器 v6.2
 现代 UI 设计 · SVG 矢量图标 · 响应式布局
 
 版本历史：
+- v6.2 (2026-07-27): 悬停格子显示详情、清理死代码、优化批量操作提示
 - v6.1 (2026-07-25): Excel 解析库从 python-calamine 改回 openpyxl，修复 CalamineWorkbook 导入错误
 - v6.0 (2026-07-24): XY轴单独翻转功能上线，支持 X↔ 和 Y↕ 独立操作
 - v5.x: 初始版本，基础库位编辑功能
@@ -779,7 +780,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.1</div>
+<div class="version">v6.2</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1782,7 +1783,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.1")
+    print(f"🦀 库位编辑器 v6.2")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
