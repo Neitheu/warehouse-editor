@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.10
+库位表格可视化编辑器 v6.11
 作者：小刘
 版本历史：
+- v6.11 (2026-07-27): Ctrl+Z 撤销（支持切换/批量/配置，最多50步）
 - v6.10 (2026-07-27): 修复导出内存泄漏、批量计数按格子去重、Esc关闭批量对话框
 - v6.9 (2026-07-27): 批量仅修改层高/承重时提示实际变更数而非选中数
 - v6.8 (2026-07-27): 右键取消锁定时同时清除选中框（cell-selecting）
@@ -788,7 +789,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.10</div>
+<div class="version">v6.11</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -823,6 +824,38 @@ let selectedCellXY = null; // 当前选中的格子 {x, y}
 let detailLocked = false; // 详情面板锁定（点击格子后锁定，悬停不切换）
 let ctrlLocked = false; // Ctrl+点击锁定（点击toolbar可解锁）
 let cellConfigs = {}; // 每个格子独立的层高/承重: { "x,y,z": { height, weight } }
+
+// 撤销栈（最多50层）
+let undoStack = [];
+const UNDO_MAX = 50;
+
+function saveUndo() {
+  const snapshot = {
+    shields: {},
+    configs: JSON.parse(JSON.stringify(cellConfigs))
+  };
+  for (const z in manualShieldedByLayer) {
+    snapshot.shields[z] = [...manualShieldedByLayer[z]];
+  }
+  undoStack.push(snapshot);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+}
+
+function undo() {
+  if (undoStack.length === 0) { showToast('没有可撤销的操作'); return; }
+  const snapshot = undoStack.pop();
+  manualShieldedByLayer = {};
+  for (const z in snapshot.shields) {
+    manualShieldedByLayer[z] = new Set(snapshot.shields[z]);
+  }
+  cellConfigs = snapshot.configs;
+  renderGrid();
+  updateStats();
+  if (detailLocked && selectedCellXY) showCellDetail(selectedCellXY.x, selectedCellXY.y);
+  if (batchDialogVisible) closeBatchDialog();
+  autoSaveConfig();
+  showToast(`已撤销（剩余 ${undoStack.length} 步）`);
+}
 
 function getShieldedLayer(z) {
   if (!manualShieldedByLayer[z]) manualShieldedByLayer[z] = new Set();
@@ -955,6 +988,7 @@ function showCellDetail(x, y, skipStatusToggle) {
 }
 
 function updateCellConfig(x, y, z, field, val) {
+  saveUndo();
   const parsedVal = parseFloat(val) || 0;
   if (syncLayersEnabled && appData.z_range.length > 1) {
     // 同步层模式：所有层都改
@@ -1286,6 +1320,7 @@ function closeBatchDialog() {
 }
 
 function batchToggleStatus(status) {
+  saveUndo();
   let changedCount = 0;
   const configChangedCells = new Set();
   const batchH = document.getElementById('batchHeight');
@@ -1345,6 +1380,7 @@ function toggleSyncLayers() {
 }
 
 function toggleCell(x, y, z) {
+  saveUndo();
   const key = `${x},${y}`;
   const layer = getShieldedLayer(z);
   const isCurrentlyShielded = layer.has(key);
@@ -1496,6 +1532,14 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
   isDragging = false;
   viewport.classList.remove('dragging');
+});
+
+// Ctrl+Z 撤销
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    undo();
+  }
 });
 
 viewport.addEventListener('touchstart', (e) => {
@@ -1901,7 +1945,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.10")
+    print(f"🦀 库位编辑器 v6.11")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
