@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.5
+库位表格可视化编辑器 v6.6
 作者：小刘
 版本历史：
+- v6.6 (2026-07-27): 右键取消锁定绑定到格子上
 - v6.5 (2026-07-27): 右键仅取消锁定，不触发选中
 - v6.4 (2026-07-27): 右键点击取消锁定、调试日志
 - v6.3 (2026-07-27): Ctrl+点击锁定详情面板、层高/承重自动保存到服务器
@@ -783,7 +784,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.5</div>
+<div class="version">v6.6</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1051,6 +1052,15 @@ function renderGrid() {
         if (e.button === 2) return; // 右键不触发选中
         e.preventDefault();
         onCellMouseDown(x, y, e);
+      };
+      // 右键取消锁定
+      cell.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (detailLocked) {
+          detailLocked = false;
+          ctrlLocked = false;
+          console.log('右键取消锁定');
+        }
       };
       cell.onmouseover = () => {
         if (isSelecting) onCellMouseOver(x, y);
@@ -1863,7 +1873,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.5")
+    print(f"🦀 库位编辑器 v6.6")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
