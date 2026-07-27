@@ -1019,6 +1019,7 @@ function renderGrid() {
       };
       cell.onmouseover = () => {
         if (isSelecting) onCellMouseOver(x, y);
+        else showCellDetail(x, y);
       };
       cell.onmouseup = () => {
         if (isSelecting) onCellMouseUp();
