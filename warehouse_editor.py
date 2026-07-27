@@ -649,12 +649,13 @@ HTML_PAGE = r"""<!DOCTYPE html>
   /* Version */
   .version {
     position: fixed;
-    bottom: 12px;
+    bottom: 4px;
     right: 16px;
     font-size: 11px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     pointer-events: none;
+    z-index: 30;
   }
   
   /* Toast */
