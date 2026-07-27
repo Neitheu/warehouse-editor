@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.9
+库位表格可视化编辑器 v6.10
 作者：小刘
 版本历史：
+- v6.10 (2026-07-27): 修复导出内存泄漏、批量计数按格子去重、Esc关闭批量对话框
 - v6.9 (2026-07-27): 批量仅修改层高/承重时提示实际变更数而非选中数
 - v6.8 (2026-07-27): 右键取消锁定时同时清除选中框（cell-selecting）
 - v6.7 (2026-07-27): 右键取消锁定时清除选中高亮和详情面板
@@ -787,7 +788,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.9</div>
+<div class="version">v6.10</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1266,6 +1267,14 @@ function showBatchDialog() {
   }
   document.getElementById('btnBatchOnlyConfig').onclick = () => batchToggleStatus(null);
   document.getElementById('btnBatchCancel').onclick = closeBatchDialog;
+  // Esc 关闭批量对话框
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeBatchDialog();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
 }
 
 function closeBatchDialog() {
@@ -1278,7 +1287,7 @@ function closeBatchDialog() {
 
 function batchToggleStatus(status) {
   let changedCount = 0;
-  let configChangedCount = 0;
+  const configChangedCells = new Set();
   const batchH = document.getElementById('batchHeight');
   const batchW = document.getElementById('batchWeight');
   const hVal = batchH && batchH.value !== '' ? parseFloat(batchH.value) : undefined;
@@ -1295,29 +1304,29 @@ function batchToggleStatus(status) {
         layer.delete(key);
         changedCount++;
       }
-      // 批量设置层高/承重（仅统计实际变更）
+      // 批量设置层高/承重（仅统计实际变更，按格子去重）
       const [x, y] = key.split(',').map(Number);
       const cellKey = `${x},${y},${z}`;
       if (!cellConfigs[cellKey]) cellConfigs[cellKey] = {};
       let cellChanged = false;
       if (hVal !== undefined && cellConfigs[cellKey].height !== hVal) { cellConfigs[cellKey].height = hVal; cellChanged = true; }
       if (wVal !== undefined && cellConfigs[cellKey].weight !== wVal) { cellConfigs[cellKey].weight = wVal; cellChanged = true; }
-      if (cellChanged) configChangedCount++;
+      if (cellChanged) configChangedCells.add(key);
     });
   });
   closeBatchDialog();
   renderGrid();
   updateStats();
-  if (changedCount === 0 && configChangedCount === 0) {
+  if (changedCount === 0 && configChangedCells.size === 0) {
     showToast(`没有需要${status === 'enabled' ? '启用' : status === 'disabled' ? '禁用' : '修改'}的库位`);
   } else {
     let msg = '';
     if (changedCount > 0) msg += `已${status === 'enabled' ? '启用' : '禁用'} ${changedCount} 个库位`;
-    if (configChangedCount > 0) {
+    if (configChangedCells.size > 0) {
       const parts = [];
       if (hVal !== undefined) parts.push(`层高 ${hVal}m`);
       if (wVal !== undefined) parts.push(`承重 ${wVal}kg`);
-      msg += (msg ? '，' : '') + `已设置 ${configChangedCount} 个库位：${parts.join('，')}`;
+      msg += (msg ? '，' : '') + `已设置 ${configChangedCells.size} 个库位：${parts.join('，')}`;
     }
     showToast(msg);
   }
@@ -1535,9 +1544,11 @@ async function exportFile() {
   const resp = await fetch('/export', { method: 'POST', headers: {'Content-Type':'application/json', 'X-Session-Id': sessionId}, body: payload });
   const blob = await resp.blob();
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  a.href = url;
   a.download = originalFileName + '_edited.xlsx';
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast('导出成功！');
 }
 </script>
@@ -1890,7 +1901,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.9")
+    print(f"🦀 库位编辑器 v6.10")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
