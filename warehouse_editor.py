@@ -355,29 +355,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
   
   .cell-shield:hover { color: white; }
   
-  .cell-inherited {
-    background: var(--red);
-    opacity: 0.5;
-    color: transparent;
-  }
-  
-  .cell-inherited:hover { color: white; }
-  
-  .cell-override {
-    background: var(--green);
-    border: 2px solid var(--orange);
-    color: transparent;
-  }
-  
-  .cell-override:hover { color: white; }
-  
-  .cell-default-shield {
-    background: var(--orange);
-    color: transparent;
-  }
-  
-  .cell-default-shield:hover { color: white; }
-  
   .cell-header {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
@@ -815,7 +792,6 @@ if (!sessionId) {
 
 let appData = null;
 let originalFileName = 'warehouse';
-let shieldedSet = new Set(); // deprecated, use manualShielded
 let layerConfigs = {}; 
 let zoom = 1;
 let currentZ = 1;
@@ -977,10 +953,6 @@ function updateCellConfig(x, y, z, field, val) {
     cellConfigs[key][field] = parsedVal;
     showToast(`已保存 X${x} Y${y} Z${z} ${field === 'height' ? '层高' : '承重'}`);
   }
-}
-
-function renderConfig() {
-  // 已废弃：改用 showCellDetail
 }
 
 function renderGrid() {
@@ -1405,13 +1377,6 @@ function toggleXYSwap() {
   renderGrid();
   fitToViewport();
 }
-function flipXYAxis() {
-  appData.x_range.reverse();
-  appData.y_range.reverse();
-  renderGrid();
-  updateStats();
-  showToast('XY轴已翻转');
-}
 function flipXAxis() {
   appData.x_range.reverse();
   renderGrid();
@@ -1622,79 +1587,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(excel_bytes)
         except Exception as e:
             self.json_response({'error': str(e)})
-    
-    def _generate_from_original(self, shielded_set, layer_configs, cell_configs=None):
-        """从原始工作簿生成导出，保留格式，更新状态/层高/承重（用修改后的数据）"""
-        if cell_configs is None:
-            cell_configs = {}
-        session_id = self._get_session_id()
-        with Handler._lock:
-            session = Handler._sessions.get(session_id)
-            original = session['bytes'] if session else None
-        if original:
-            wb = openpyxl.load_workbook(io.BytesIO(original))
-            ws = None
-            for name in wb.sheetnames:
-                if '库位' in name or '导出' in name:
-                    ws = wb[name]
-                    break
-            if ws is None:
-                ws = wb.active
-            
-            print(f"[EXPORT] sheet={ws.title}, shielded count={len(shielded_set)}")
-            print(f"[EXPORT] layer_configs={layer_configs}")
-            
-            # 更新每行的状态(列5)、层高(列6)、承重(列7)
-            modified = 0
-            for row in ws.iter_rows(min_row=3):
-                if row[0] is None:
-                    continue
-                id_val = str(row[0]).strip()
-                parts = id_val.split('-')
-                if len(parts) >= 5:
-                    x, y, z = int(parts[2]), int(parts[3]), int(parts[4])
-                    key = (x, y, z)
-                    # 可用状态 - 清除公式，直接写值
-                    cell_status = row[4]
-                    cell_status.value = '不可用' if key in shielded_set else '正常'
-                    cell_status.data_type = 's'
-                    if cell_status.formula:
-                        cell_status._value = cell_status.value
-                        cell_status.formula = None
-                    # 层高 - 优先用 cell_configs 修改值，没有就用 layer_configs 原始值
-                    cell_h = row[5]
-                    cell_cfg = cell_configs.get(f"{x},{y},{z}", {})
-                    h_val = cell_cfg.get('height') if cell_cfg.get('height') is not None else (layer_configs[z].get('height', '') if z in layer_configs else '')
-                    if h_val != '':
-                        cell_h.value = h_val
-                        cell_h.data_type = 'n'
-                        if cell_h.formula:
-                            cell_h._value = cell_h.value
-                            cell_h.formula = None
-                    # 承重 - 优先用 cell_configs 修改值，没有就用 layer_configs 原始值
-                    cell_w = row[6]
-                    w_val = cell_cfg.get('weight') if cell_cfg.get('weight') is not None else (layer_configs[z].get('weight', '') if z in layer_configs else '')
-                    if w_val != '':
-                        cell_w.value = w_val
-                        cell_w.data_type = 'n'
-                        if cell_w.formula:
-                            cell_w._value = cell_w.value
-                            cell_w.formula = None
-                    modified += 1
-                    if modified <= 3:
-                        print(f"[EXPORT] row modified: x={x} y={y} z={z} status={cell_status.value} h={cell_h.value} w={cell_w.value}")
-            
-            print(f"[EXPORT] total modified rows: {modified}")
-            
-            buf = io.BytesIO()
-            wb.save(buf)
-            return buf.getvalue()
-            
-            buf = io.BytesIO()
-            wb.save(buf)
-            return buf.getvalue()
-        else:
-            raise RuntimeError('原始工作簿数据不存在，请重新上传文件')
     
     def json_response(self, data):
         self.send_response(200)
