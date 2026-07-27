@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.7
+库位表格可视化编辑器 v6.8
 作者：小刘
 版本历史：
+- v6.8 (2026-07-27): 右键取消锁定时同时清除选中框（cell-selecting）
 - v6.7 (2026-07-27): 右键取消锁定时清除选中高亮和详情面板
 - v6.6 (2026-07-27): 右键取消锁定绑定到格子上
 - v6.5 (2026-07-27): 右键仅取消锁定，不触发选中
@@ -785,7 +786,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.7</div>
+<div class="version">v6.8</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1054,7 +1055,7 @@ function renderGrid() {
         e.preventDefault();
         onCellMouseDown(x, y, e);
       };
-      // 右键取消锁定
+      // 右键取消锁定 + 清除选中框
       cell.oncontextmenu = (e) => {
         e.preventDefault();
         if (detailLocked) {
@@ -1063,9 +1064,13 @@ function renderGrid() {
           selectedCellXY = null;
           // 移除选中高亮
           document.querySelectorAll('.grid-cell.selected-cell').forEach(c => c.classList.remove('selected-cell'));
+          // 清除选中框（cell-selecting）
+          selectedCells.clear();
+          updateSelectionHighlight();
+          isSelecting = false;
           // 恢复详情面板默认提示
           document.getElementById('cellDetailInner').innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">点击格子查看详情</div>';
-          console.log('右键取消锁定');
+          console.log('右键取消锁定+清除选中框');
         }
       };
       cell.onmouseover = () => {
@@ -1456,13 +1461,16 @@ viewport.addEventListener('mousedown', (e) => {
   dragStart = { x: e.clientX - gridOffset.x, y: e.clientY - gridOffset.y };
   viewport.classList.add('dragging');
 });
-// 右键点击取消锁定
+// 右键点击取消锁定 + 清除选中框
 viewport.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (detailLocked) {
     detailLocked = false;
     ctrlLocked = false;
-    console.log('右键取消锁定');
+    selectedCells.clear();
+    updateSelectionHighlight();
+    isSelecting = false;
+    console.log('右键取消锁定+清除选中框');
   }
 });
 
@@ -1879,7 +1887,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.7")
+    print(f"🦀 库位编辑器 v6.8")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
