@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-库位表格可视化编辑器 v6.11
+库位表格可视化编辑器 v6.12
 作者：小刘
 版本历史：
+- v6.12 (2026-07-27): 鼠标滚轮放大缩小（向上滚放大、向下滚缩小）
 - v6.11 (2026-07-27): Ctrl+Z 撤销（支持切换/批量/配置，最多50步）
 - v6.10 (2026-07-27): 修复导出内存泄漏、批量计数按格子去重、Esc关闭批量对话框
 - v6.9 (2026-07-27): 批量仅修改层高/承重时提示实际变更数而非选中数
@@ -789,7 +790,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<div class="version">v6.11</div>
+<div class="version">v6.12</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1521,6 +1522,15 @@ viewport.addEventListener('contextmenu', (e) => {
     console.log('右键取消锁定+清除选中框');
   }
 });
+// 滚轮放大缩小
+viewport.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (e.deltaY < 0) {
+    zoomIn();
+  } else {
+    zoomOut();
+  }
+}, { passive: false });
 
 document.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
@@ -1945,7 +1955,7 @@ def generate_excel(x_range, y_range, z_range, shielded_set, layer_configs, cell_
 
 
 if __name__ == '__main__':
-    print(f"🦀 库位编辑器 v6.11")
+    print(f"🦀 库位编辑器 v6.12")
     print(f"📍 https://0.0.0.0:{PORT}")
     class ThreadedHTTPServer(http.server.HTTPServer):
         def process_request(self, request, client_address):
